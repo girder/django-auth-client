@@ -111,8 +111,8 @@ export default class OauthFacade {
       grant_type: GRANT_TYPE_AUTHORIZATION_CODE,
       code: authRequestResponse.response.code,
       extras: {
-        // code_verifier should always be specified, but this is a safer runtime check
-        code_verifier: authRequestResponse.request.internal?.code_verifier ?? '',
+        // "code_verifier" should always be specified
+        code_verifier: authRequestResponse.request.internal!.code_verifier,
       },
     });
     return this.tokenHandler.performTokenRequest(this.config, tokenRequest);

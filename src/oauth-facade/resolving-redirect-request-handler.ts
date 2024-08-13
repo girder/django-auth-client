@@ -69,8 +69,8 @@ export default class ResolvingRedirectRequestHandler extends RedirectRequestHand
       ...Object.keys(localStorage)
         .filter((key) => key.includes('appauth_authorization')),
     ];
-    oldKeys.forEach((key) => {
+    for (const key of oldKeys) {
       localStorage.removeItem(key);
-    });
+    }
   }
 }

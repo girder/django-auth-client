@@ -75,7 +75,7 @@ export default class OauthClient {
       try {
         this.token = await this.oauthFacade.refresh(this.token);
       } catch (error) {
-        console.error(`Error refreshing token: ${error}`);
+        console.error('Error refreshing token: %o', error);
         this.token = null;
       }
     }
@@ -89,7 +89,7 @@ export default class OauthClient {
       try {
         await this.oauthFacade.logout(this.token);
       } catch (error) {
-        console.error(`Error logging out token: ${error}`);
+        console.error('Error logging out token: %o', error);
       }
     }
 
