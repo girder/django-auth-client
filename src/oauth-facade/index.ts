@@ -10,12 +10,11 @@ import {
   LocalStorageBackend,
   RevokeTokenRequest,
   TokenRequest,
-  TokenResponse,
+  type TokenRequestHandler,
+  type TokenResponse,
 } from '@openid/appauth';
-
-import type { TokenRequestHandler } from '@openid/appauth/src/token_request_handler';
-import NoHashQueryStringUtils from './no-hash-query-string-utils';
-import ResolvingRedirectRequestHandler from './resolving-redirect-request-handler';
+import NoHashQueryStringUtils from './no-hash-query-string-utils.js';
+import ResolvingRedirectRequestHandler from './resolving-redirect-request-handler.js';
 
 export { TokenResponse, type TokenResponseJson } from '@openid/appauth';
 

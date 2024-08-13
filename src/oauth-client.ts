@@ -1,4 +1,4 @@
-import OauthFacade, { TokenResponse, type TokenResponseJson } from './oauth-facade';
+import OauthFacade, { TokenResponse, type TokenResponseJson } from './oauth-facade/index.js';
 
 export type Headers = Record<string, string>;
 

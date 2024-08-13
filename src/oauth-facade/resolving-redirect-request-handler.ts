@@ -1,5 +1,8 @@
-import { type AuthorizationResponse, RedirectRequestHandler } from '@openid/appauth';
-import type { AuthorizationRequest } from '@openid/appauth/built/authorization_request';
+import {
+  type AuthorizationRequest,
+  type AuthorizationResponse,
+  RedirectRequestHandler,
+} from '@openid/appauth';
 
 export type SuccessfulAuthorizationRequestResponse = {
   request: AuthorizationRequest;
