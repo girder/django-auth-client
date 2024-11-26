@@ -1,5 +1,4 @@
 import {
-  AuthorizationNotifier,
   AuthorizationRequest,
   AuthorizationServiceConfiguration,
   BaseTokenRequestHandler,
@@ -97,9 +96,6 @@ export default class OauthFacade {
    * post-login state. Otherwise, the Promise will reject.
    */
   public async finishLogin(): Promise<TokenResponse> {
-    const notifier = new AuthorizationNotifier();
-    this.authHandler.setAuthorizationNotifier(notifier);
-
     // Fetch a valid auth response (or throw)
     const authRequestResponse = await this.authHandler.resolveAuthorizationRequest();
 
