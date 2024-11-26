@@ -25,9 +25,6 @@ export default class OauthClient {
     }
 
     const cleanedAuthorizationServerBaseUrl = new URL(authorizationServerBaseUrl);
-    // Strip any trailing slash
-    cleanedAuthorizationServerBaseUrl.pathname = authorizationServerBaseUrl.pathname
-      .replace(/\/$/, '');
     // A URL base cannot have query string or fragment components
     cleanedAuthorizationServerBaseUrl.search = '';
     cleanedAuthorizationServerBaseUrl.hash = '';
