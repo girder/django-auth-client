@@ -1,4 +1,4 @@
-import OauthFacade, { TokenResponse, type TokenResponseJson } from './oauth-facade/index.js';
+import OauthFacade, { TokenResponse, NoAuthInProgressError, type TokenResponseJson } from './oauth-facade/index.js';
 
 export type Headers = Record<string, string>;
 
@@ -53,10 +53,11 @@ export default class OauthClient {
     // Returning from an Authorization flow should trump any other source of token recovery.
     try {
       this.token = await this.oauthFacade.finishLogin();
-    } catch {
-      // Most likely, there is no pending Authorization flow.
-      // Possibly, there is an Authorization failure, which will be emitted to the
-      // console, but doesn't need to be fatal, since this can just proceed with no token.
+    } catch (error) {
+      if (!(error instanceof NoAuthInProgressError)) {
+        // Anything other than a NoAuthInProgressError is abnormal
+        throw error;
+      }
     }
     // Regardless of the outcome, remove any Authorization parameters, since the flow is now
     // concluded.
@@ -72,8 +73,8 @@ export default class OauthClient {
       try {
         this.token = await this.oauthFacade.refresh(this.token);
       } catch (error) {
-        console.error('Error refreshing token: %o', error);
         this.token = null;
+        throw error;
       }
     }
 
@@ -85,14 +86,12 @@ export default class OauthClient {
     if (this.token) {
       try {
         await this.oauthFacade.logout(this.token);
-      } catch (error) {
-        console.error('Error logging out token: %o', error);
+      } finally {
+        // As a guard against stateful weirdness, always clear the token.
+        this.token = null;
+        this.storeToken();
       }
     }
-
-    // As a guard against stateful weirdness, always to clear the token.
-    this.token = null;
-    this.storeToken();
   }
 
   public get authHeaders(): Headers {

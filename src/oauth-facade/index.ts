@@ -2,7 +2,6 @@ import {
   AuthorizationRequest,
   AuthorizationServiceConfiguration,
   BaseTokenRequestHandler,
-  FetchRequestor,
   setFlag,
   GRANT_TYPE_AUTHORIZATION_CODE,
   GRANT_TYPE_REFRESH_TOKEN,
@@ -11,11 +10,16 @@ import {
   TokenRequest,
   type TokenRequestHandler,
   type TokenResponse,
+  AppAuthError,
+  TokenError,
 } from '@openid/appauth';
 import NoHashQueryStringUtils from './no-hash-query-string-utils.js';
 import ResolvingRedirectRequestHandler from './resolving-redirect-request-handler.js';
+import { LogoutFailureError, ServerError, TokenFailureError } from './error.js';
+import OauthFetchRequestor from './oauth-fetch-requestor.js';
 
 export { TokenResponse, type TokenResponseJson } from '@openid/appauth';
+export * from './error.js';
 
 // Disable console logging from @openid/appauth
 setFlag('IS_LOG', false);
@@ -34,7 +38,7 @@ export default class OauthFacade {
   );
 
   protected readonly tokenHandler: TokenRequestHandler = new BaseTokenRequestHandler(
-    new FetchRequestor(),
+    new OauthFetchRequestor(),
   );
 
   /**
@@ -110,7 +114,28 @@ export default class OauthFacade {
         code_verifier: authRequestResponse.request.internal!.code_verifier,
       },
     });
-    return this.tokenHandler.performTokenRequest(this.config, tokenRequest);
+
+    try {
+      return await this.tokenHandler.performTokenRequest(this.config, tokenRequest);
+    } catch (error) {
+      // Based on the implementation of performTokenRequest, the error should at least be an
+      // AppAuthError, but this cannot be structurally guaranteed
+      if (error instanceof AppAuthError) {
+        if (error.extras instanceof TokenError) {
+          // The server returned a well-formed OAuth2 error
+          throw new TokenFailureError(
+            error.extras.error,
+            error.extras.errorDescription,
+            error.extras.errorUri ? new URL(error.extras.errorUri) : undefined,
+          );
+        }
+        // The server or connection failed in some way
+        throw new ServerError(error.message);
+      }
+      // This should never happen
+      /* v8 ignore next 2 */
+      throw new Error('Internal error');
+    }
   }
 
   public async refresh(token: TokenResponse): Promise<TokenResponse> {
@@ -137,7 +162,18 @@ export default class OauthFacade {
       token_type_hint: 'access_token',
       client_id: this.clientId,
     });
-    await this.tokenHandler.performRevokeTokenRequest(this.config, revokeTokenRequest);
+    try {
+      await this.tokenHandler.performRevokeTokenRequest(this.config, revokeTokenRequest);
+    } catch (error) {
+      // Based on the implementation of performRevokeTokenRequest, the error should at least be an
+      // AppAuthError, but this cannot be structurally guaranteed
+      if (error instanceof AppAuthError) {
+        throw new LogoutFailureError('', error.message); // TODO: get a code for a 4xx error
+      }
+      // This should never happen
+      /* v8 ignore next 2 */
+      throw new Error('Internal error');
+    }
   }
 
   /**
