@@ -41,35 +41,34 @@ export default class OauthFacade {
   /**
    * Create an OauthFacade.
    *
-   * @param authorizationServerBaseUrl The common base URL for Authorization Server endpoints,
-   *                                   without a trailing slash.
+   * @param authorizationServerBaseUrl The common base URL for Authorization Server endpoints.
    * @param redirectUrl The URL of the current page, to be redirected back to after authorization.
    * @param clientId The Client ID for this application.
    * @param scopes An array of scopes to request access to.
    */
   constructor(
-    protected readonly authorizationServerBaseUrl: string,
-    protected readonly redirectUrl: string,
+    protected readonly authorizationServerBaseUrl: URL,
+    protected readonly redirectUrl: URL,
     protected readonly clientId: string,
     protected readonly scopes: string[],
   ) {
     this.config = new AuthorizationServiceConfiguration({
-      authorization_endpoint: this.authorizationEndpoint,
-      token_endpoint: this.tokenEndpoint,
-      revocation_endpoint: this.revocationEndpoint,
+      authorization_endpoint: this.authorizationEndpoint.toString(),
+      token_endpoint: this.tokenEndpoint.toString(),
+      revocation_endpoint: this.revocationEndpoint.toString(),
     });
   }
 
-  protected get authorizationEndpoint(): string {
-    return `${this.authorizationServerBaseUrl}/authorize/`;
+  protected get authorizationEndpoint(): URL {
+    return new URL('authorize/', this.authorizationServerBaseUrl);
   }
 
-  protected get tokenEndpoint(): string {
-    return `${this.authorizationServerBaseUrl}/token/`;
+  protected get tokenEndpoint(): URL {
+    return new URL('token/', this.authorizationServerBaseUrl);
   }
 
-  protected get revocationEndpoint(): string {
-    return `${this.authorizationServerBaseUrl}/revoke_token/`;
+  protected get revocationEndpoint(): URL {
+    return new URL('revoke_token/', this.authorizationServerBaseUrl);
   }
 
   /**
@@ -80,7 +79,7 @@ export default class OauthFacade {
   public async startLogin(): Promise<void> {
     const authRequest = new AuthorizationRequest({
       client_id: this.clientId,
-      redirect_uri: this.redirectUrl,
+      redirect_uri: this.redirectUrl.toString(),
       scope: this.scopes.join(' '),
       response_type: AuthorizationRequest.RESPONSE_TYPE_CODE,
       extras: {
@@ -107,7 +106,7 @@ export default class OauthFacade {
     // Exchange for an access token and return tokenResponse
     const tokenRequest = new TokenRequest({
       client_id: this.clientId,
-      redirect_uri: this.redirectUrl,
+      redirect_uri: this.redirectUrl.toString(),
       grant_type: GRANT_TYPE_AUTHORIZATION_CODE,
       code: authRequestResponse.response.code,
       extras: {
@@ -121,7 +120,7 @@ export default class OauthFacade {
   public async refresh(token: TokenResponse): Promise<TokenResponse> {
     const tokenRequest = new TokenRequest({
       client_id: this.clientId,
-      redirect_uri: this.redirectUrl,
+      redirect_uri: this.redirectUrl.toString(),
       grant_type: GRANT_TYPE_REFRESH_TOKEN,
       refresh_token: token.refreshToken,
       // Don't specify a new scope, which will implicitly request the same scope as the old token

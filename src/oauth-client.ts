@@ -37,8 +37,8 @@ export default class OauthClient {
     cleanedRedirectUrl.hash = '';
 
     this.oauthFacade = new OauthFacade(
-      cleanedAuthorizationServerBaseUrl.toString(),
-      cleanedRedirectUrl.toString(),
+      cleanedAuthorizationServerBaseUrl,
+      cleanedRedirectUrl,
       this.clientId,
       scopes,
     );
