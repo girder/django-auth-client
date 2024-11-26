@@ -13,8 +13,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: current
-      - name: Build and test
+      - name: Install dependencies
         run: |
           npm ci
+      - name: Ensure build succeeds
+        run: |
           npm run build
-          npm run lint
+      - name: Run tests
+        run: |
+          npm run test
