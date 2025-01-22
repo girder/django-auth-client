@@ -17,7 +17,7 @@ export default class OauthClient {
     protected readonly clientId: string,
     {
       scopes = [],
-      redirectUrl = new URL(window.location.toString()),
+      redirectUrl = OauthClient.cleanedCurrentUrl(),
     }: OauthClientOptions = {},
   ) {
     if (!window.isSecureContext) {
@@ -63,7 +63,7 @@ export default class OauthClient {
     }
     // Regardless of the outcome, remove any Authorization parameters, since the flow is now
     // concluded.
-    this.removeUrlParameters();
+    window.history.replaceState(null, '', OauthClient.cleanedCurrentUrl().toString());
 
     if (!this.token) {
       // Try restoring from a locally saved token.
@@ -127,10 +127,9 @@ export default class OauthClient {
   }
 
   /**
-   * Remove Authorization Response parameters from the URL query string.
+   * Remove Authorization Response parameters from the current URL query string.
    */
-  // eslint-disable-next-line class-methods-use-this
-  protected removeUrlParameters(): void {
+  protected static cleanedCurrentUrl(): URL {
     const currentUrl = window.location.toString();
 
     const url = new URL(currentUrl);
@@ -145,10 +144,6 @@ export default class OauthClient {
     for (const oauthParameter of oauthParameters) {
       url.searchParams.delete(oauthParameter);
     }
-    const newUrl = url.toString();
-
-    if (currentUrl !== newUrl) {
-      window.history.replaceState(null, '', newUrl);
-    }
+    return url;
   }
 }
