@@ -1,7 +1,7 @@
 {
   "name": "@resonant/oauth-client",
   "version": "0.0.0",
-  "description": "A TypeScript library for performing OAuth login to a Resonant server.",
+  "description": "A TypeScript library for performing OAuth2 login to a Resonant server.",
   "repository": "github:kitware-resonant/resonant-oauth-client",
   "author": "Kitware, Inc. <kitware@kitware.com>",
   "license": "Apache-2.0",
