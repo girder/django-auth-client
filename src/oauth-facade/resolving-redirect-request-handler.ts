@@ -1,5 +1,9 @@
-import { type AuthorizationResponse, RedirectRequestHandler } from '@openid/appauth';
-import type { AuthorizationRequest } from '@openid/appauth/built/authorization_request';
+import {
+  type AuthorizationRequest,
+  type AuthorizationResponse,
+  RedirectRequestHandler,
+} from '@openid/appauth';
+import { AuthorizationFailureError, NoAuthInProgressError } from './error.js';
 
 export type SuccessfulAuthorizationRequestResponse = {
   request: AuthorizationRequest;
@@ -19,9 +23,12 @@ export default class ResolvingRedirectRequestHandler extends RedirectRequestHand
     try {
       authorizationRequestResponse = await this.completeAuthorizationRequest();
       if (!authorizationRequestResponse) {
-        // This is potentially a normal case of no auth flow, but could be an error with
-        // mismatched internal and URL-returned state
-        throw new Error('Authorization incomplete.');
+        // This is typically a normal case of no authorization flow existing.
+        // However, this state is also reached with a mismatched internal and URL-returned "state"
+        // value, but there's no way to distinguish this (unless we tried to parse log entries);
+        // since this case would be caused by an internal error and is non-actionable by
+        // developer users or end users, we just neglect it.
+        throw new NoAuthInProgressError();
       }
     } finally {
       ResolvingRedirectRequestHandler.purgeStorage();
@@ -29,15 +36,21 @@ export default class ResolvingRedirectRequestHandler extends RedirectRequestHand
 
     const { response } = authorizationRequestResponse;
     if (!response) {
-      // Based on the implementation of completeAuthorizationRequest, the error is
-      // typically available at this point, but it cannot be structurally guaranteed
-      const errorCode = authorizationRequestResponse.error?.error;
-      const errorDescription = authorizationRequestResponse.error?.errorDescription;
-
-      // This is an explicit server-provided error, so log it
-      const error = new Error(`Authorization error: ${errorCode}${errorDescription ? `: ${errorDescription}` : ''}.`);
-      console.error(error);
-      throw error;
+      // This is an explicit server-provided error
+      const { error } = authorizationRequestResponse;
+      // Based on the implementation of completeAuthorizationRequest, the error should be
+      // available at this point, but it cannot be structurally guaranteed
+      if (error) {
+        // The server returned a well-formed OAuth2 error
+        throw new AuthorizationFailureError(
+          error.error,
+          error.errorDescription,
+          error.errorUri ? new URL(error.errorUri) : undefined,
+        );
+      }
+      // This should never happen
+      /* v8 ignore next 2 */
+      throw new Error('Internal error');
     }
 
     const { request } = authorizationRequestResponse;
@@ -66,8 +79,8 @@ export default class ResolvingRedirectRequestHandler extends RedirectRequestHand
       ...Object.keys(localStorage)
         .filter((key) => key.includes('appauth_authorization')),
     ];
-    oldKeys.forEach((key) => {
+    for (const key of oldKeys) {
       localStorage.removeItem(key);
-    });
+    }
   }
 }

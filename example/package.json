@@ -10,10 +10,13 @@
     "@resonant/oauth-client": "file:.."
   },
   "devDependencies": {
-    "parcel": "^2.12.0"
+    "parcel": "^2.13.3"
   },
   "browserslist": [
     "last 1 chrome version",
     "last 1 firefox version"
-  ]
+  ],
+  "@parcel/resolver-default": {
+    "packageExports": true
+  }
 }

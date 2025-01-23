@@ -1,4 +1,4 @@
-import OauthFacade, { TokenResponse, type TokenResponseJson } from './oauth-facade';
+import OauthFacade, { TokenResponse, NoAuthInProgressError, type TokenResponseJson } from './oauth-facade/index.js';
 
 export type Headers = Record<string, string>;
 
@@ -17,7 +17,7 @@ export default class OauthClient {
     protected readonly clientId: string,
     {
       scopes = [],
-      redirectUrl = new URL(window.location.toString()),
+      redirectUrl = OauthClient.cleanedCurrentUrl(),
     }: OauthClientOptions = {},
   ) {
     if (!window.isSecureContext) {
@@ -25,9 +25,6 @@ export default class OauthClient {
     }
 
     const cleanedAuthorizationServerBaseUrl = new URL(authorizationServerBaseUrl);
-    // Strip any trailing slash
-    cleanedAuthorizationServerBaseUrl.pathname = authorizationServerBaseUrl.pathname
-      .replace(/\/$/, '');
     // A URL base cannot have query string or fragment components
     cleanedAuthorizationServerBaseUrl.search = '';
     cleanedAuthorizationServerBaseUrl.hash = '';
@@ -37,8 +34,8 @@ export default class OauthClient {
     cleanedRedirectUrl.hash = '';
 
     this.oauthFacade = new OauthFacade(
-      cleanedAuthorizationServerBaseUrl.toString(),
-      cleanedRedirectUrl.toString(),
+      cleanedAuthorizationServerBaseUrl,
+      cleanedRedirectUrl,
       this.clientId,
       scopes,
     );
@@ -56,14 +53,15 @@ export default class OauthClient {
     // Returning from an Authorization flow should trump any other source of token recovery.
     try {
       this.token = await this.oauthFacade.finishLogin();
-    } catch {
-      // Most likely, there is no pending Authorization flow.
-      // Possibly, there is an Authorization failure, which will be emitted to the
-      // console, but doesn't need to be fatal, since this can just proceed with no token.
+    } catch (error) {
+      if (!(error instanceof NoAuthInProgressError)) {
+        // Anything other than a NoAuthInProgressError is abnormal
+        throw error;
+      }
     }
     // Regardless of the outcome, remove any Authorization parameters, since the flow is now
     // concluded.
-    this.removeUrlParameters();
+    window.history.replaceState(null, '', OauthClient.cleanedCurrentUrl().toString());
 
     if (!this.token) {
       // Try restoring from a locally saved token.
@@ -75,8 +73,8 @@ export default class OauthClient {
       try {
         this.token = await this.oauthFacade.refresh(this.token);
       } catch (error) {
-        console.error(`Error refreshing token: ${error}`);
         this.token = null;
+        throw error;
       }
     }
 
@@ -88,14 +86,12 @@ export default class OauthClient {
     if (this.token) {
       try {
         await this.oauthFacade.logout(this.token);
-      } catch (error) {
-        console.error(`Error logging out token: ${error}`);
+      } finally {
+        // As a guard against stateful weirdness, always clear the token.
+        this.token = null;
+        this.storeToken();
       }
     }
-
-    // As a guard against stateful weirdness, always to clear the token.
-    this.token = null;
-    this.storeToken();
   }
 
   public get authHeaders(): Headers {
@@ -127,10 +123,9 @@ export default class OauthClient {
   }
 
   /**
-   * Remove Authorization Response parameters from the URL query string.
+   * Remove Authorization Response parameters from the current URL query string.
    */
-  // eslint-disable-next-line class-methods-use-this
-  protected removeUrlParameters(): void {
+  protected static cleanedCurrentUrl(): URL {
     const currentUrl = window.location.toString();
 
     const url = new URL(currentUrl);
@@ -145,10 +140,6 @@ export default class OauthClient {
     for (const oauthParameter of oauthParameters) {
       url.searchParams.delete(oauthParameter);
     }
-    const newUrl = url.toString();
-
-    if (currentUrl !== newUrl) {
-      window.history.replaceState(null, '', newUrl);
-    }
+    return url;
   }
 }

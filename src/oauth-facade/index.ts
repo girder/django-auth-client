@@ -1,26 +1,28 @@
 import {
-  AuthorizationNotifier,
   AuthorizationRequest,
   AuthorizationServiceConfiguration,
   BaseTokenRequestHandler,
-  FetchRequestor,
-  Flags,
+  setFlag,
   GRANT_TYPE_AUTHORIZATION_CODE,
   GRANT_TYPE_REFRESH_TOKEN,
   LocalStorageBackend,
   RevokeTokenRequest,
   TokenRequest,
-  TokenResponse,
+  type TokenRequestHandler,
+  type TokenResponse,
+  AppAuthError,
+  TokenError,
 } from '@openid/appauth';
-
-import type { TokenRequestHandler } from '@openid/appauth/src/token_request_handler';
-import NoHashQueryStringUtils from './no-hash-query-string-utils';
-import ResolvingRedirectRequestHandler from './resolving-redirect-request-handler';
+import NoHashQueryStringUtils from './no-hash-query-string-utils.js';
+import ResolvingRedirectRequestHandler from './resolving-redirect-request-handler.js';
+import { LogoutFailureError, ServerError, TokenFailureError } from './error.js';
+import OauthFetchRequestor from './oauth-fetch-requestor.js';
 
 export { TokenResponse, type TokenResponseJson } from '@openid/appauth';
+export * from './error.js';
 
 // Disable console logging from @openid/appauth
-Flags.IS_LOG = false;
+setFlag('IS_LOG', false);
 
 /**
  * A stateless manager for OAuth server interaction.
@@ -36,41 +38,40 @@ export default class OauthFacade {
   );
 
   protected readonly tokenHandler: TokenRequestHandler = new BaseTokenRequestHandler(
-    new FetchRequestor(),
+    new OauthFetchRequestor(),
   );
 
   /**
    * Create an OauthFacade.
    *
-   * @param authorizationServerBaseUrl The common base URL for Authorization Server endpoints,
-   *                                   without a trailing slash.
+   * @param authorizationServerBaseUrl The common base URL for Authorization Server endpoints.
    * @param redirectUrl The URL of the current page, to be redirected back to after authorization.
    * @param clientId The Client ID for this application.
    * @param scopes An array of scopes to request access to.
    */
   constructor(
-    protected readonly authorizationServerBaseUrl: string,
-    protected readonly redirectUrl: string,
+    protected readonly authorizationServerBaseUrl: URL,
+    protected readonly redirectUrl: URL,
     protected readonly clientId: string,
     protected readonly scopes: string[],
   ) {
     this.config = new AuthorizationServiceConfiguration({
-      authorization_endpoint: this.authorizationEndpoint,
-      token_endpoint: this.tokenEndpoint,
-      revocation_endpoint: this.revocationEndpoint,
+      authorization_endpoint: this.authorizationEndpoint.toString(),
+      token_endpoint: this.tokenEndpoint.toString(),
+      revocation_endpoint: this.revocationEndpoint.toString(),
     });
   }
 
-  protected get authorizationEndpoint(): string {
-    return `${this.authorizationServerBaseUrl}/authorize/`;
+  protected get authorizationEndpoint(): URL {
+    return new URL('authorize/', this.authorizationServerBaseUrl);
   }
 
-  protected get tokenEndpoint(): string {
-    return `${this.authorizationServerBaseUrl}/token/`;
+  protected get tokenEndpoint(): URL {
+    return new URL('token/', this.authorizationServerBaseUrl);
   }
 
-  protected get revocationEndpoint(): string {
-    return `${this.authorizationServerBaseUrl}/revoke_token/`;
+  protected get revocationEndpoint(): URL {
+    return new URL('revoke_token/', this.authorizationServerBaseUrl);
   }
 
   /**
@@ -81,7 +82,7 @@ export default class OauthFacade {
   public async startLogin(): Promise<void> {
     const authRequest = new AuthorizationRequest({
       client_id: this.clientId,
-      redirect_uri: this.redirectUrl,
+      redirect_uri: this.redirectUrl.toString(),
       scope: this.scopes.join(' '),
       response_type: AuthorizationRequest.RESPONSE_TYPE_CODE,
       extras: {
@@ -99,30 +100,48 @@ export default class OauthFacade {
    * post-login state. Otherwise, the Promise will reject.
    */
   public async finishLogin(): Promise<TokenResponse> {
-    const notifier = new AuthorizationNotifier();
-    this.authHandler.setAuthorizationNotifier(notifier);
-
     // Fetch a valid auth response (or throw)
     const authRequestResponse = await this.authHandler.resolveAuthorizationRequest();
 
     // Exchange for an access token and return tokenResponse
     const tokenRequest = new TokenRequest({
       client_id: this.clientId,
-      redirect_uri: this.redirectUrl,
+      redirect_uri: this.redirectUrl.toString(),
       grant_type: GRANT_TYPE_AUTHORIZATION_CODE,
       code: authRequestResponse.response.code,
       extras: {
-        // code_verifier should always be specified, but this is a safer runtime check
-        code_verifier: authRequestResponse.request.internal?.code_verifier ?? '',
+        // "code_verifier" should always be specified
+        code_verifier: authRequestResponse.request.internal!.code_verifier,
       },
     });
-    return this.tokenHandler.performTokenRequest(this.config, tokenRequest);
+
+    try {
+      return await this.tokenHandler.performTokenRequest(this.config, tokenRequest);
+    } catch (error) {
+      // Based on the implementation of performTokenRequest, the error should at least be an
+      // AppAuthError, but this cannot be structurally guaranteed
+      if (error instanceof AppAuthError) {
+        if (error.extras instanceof TokenError) {
+          // The server returned a well-formed OAuth2 error
+          throw new TokenFailureError(
+            error.extras.error,
+            error.extras.errorDescription,
+            error.extras.errorUri ? new URL(error.extras.errorUri) : undefined,
+          );
+        }
+        // The server or connection failed in some way
+        throw new ServerError(error.message);
+      }
+      // This should never happen
+      /* v8 ignore next 2 */
+      throw new Error('Internal error');
+    }
   }
 
   public async refresh(token: TokenResponse): Promise<TokenResponse> {
     const tokenRequest = new TokenRequest({
       client_id: this.clientId,
-      redirect_uri: this.redirectUrl,
+      redirect_uri: this.redirectUrl.toString(),
       grant_type: GRANT_TYPE_REFRESH_TOKEN,
       refresh_token: token.refreshToken,
       // Don't specify a new scope, which will implicitly request the same scope as the old token
@@ -143,7 +162,18 @@ export default class OauthFacade {
       token_type_hint: 'access_token',
       client_id: this.clientId,
     });
-    await this.tokenHandler.performRevokeTokenRequest(this.config, revokeTokenRequest);
+    try {
+      await this.tokenHandler.performRevokeTokenRequest(this.config, revokeTokenRequest);
+    } catch (error) {
+      // Based on the implementation of performRevokeTokenRequest, the error should at least be an
+      // AppAuthError, but this cannot be structurally guaranteed
+      if (error instanceof AppAuthError) {
+        throw new LogoutFailureError('', error.message); // TODO: get a code for a 4xx error
+      }
+      // This should never happen
+      /* v8 ignore next 2 */
+      throw new Error('Internal error');
+    }
   }
 
   /**
