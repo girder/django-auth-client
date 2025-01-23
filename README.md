@@ -68,18 +68,6 @@ using the OAuth2.0 Authorization Code Grant with PKCE flow.
   });
   ```
 
-## Example app
-This repository comes bundled with an [example application](example/index.html). Run it with:
-```bash
-git clone https://github.com/kitware-resonant/resonant-oauth-client.git
-npm install
-npm run build
-cd example
-npm install
-npm run serve
-# Visit http://localhost:1234/
-```
-
 ## Development
 To develop the library using the example app:
 ```bash
