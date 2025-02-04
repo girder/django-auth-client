@@ -93,7 +93,15 @@ export default setupServer(
 
   http.post('https://api.example.com/revoke_token/', async ({ request }) => {
     const oauthRequest = await mswRequestToOauth(request);
-    const oauthResponse = new OAuth2Server.Response();
+    const oauthResponse = new OAuth2Server.Response({
+      // RFC 7009 states that this has no body ann some servers send a non-JSON content type.
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+      },
+      body: '',
+    });
+    // TODO: The test environment doesn't actually throw an error if `.json()` is called on this
+    // response, but a real browser does.
 
     // The oauth2-server library doesn't implement revoking an "access_token".
     // Revoking a "refresh_token" is implemented internally, but not via a distinctly callable

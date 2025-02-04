@@ -50,6 +50,10 @@ export default class OauthFetchRequestor extends FetchRequestor {
       // eslint-disable-next-line @typescript-eslint/no-throw-literal
       throw new AppAuthError(`${response.statusText}: ${await response.text()}`);
     }
-    return response.json();
+
+    if (response.headers.get('Content-Type')?.includes('application/json')) {
+      return response.json();
+    }
+    return response.text() as Promise<T>;
   }
 }
