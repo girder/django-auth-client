@@ -9,7 +9,6 @@
   "engines": {
     "node": ">=16"
   },
-  "module": "./dist/index.js",
   "exports": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
