@@ -15,7 +15,7 @@ import {
 } from '@openid/appauth';
 import NoHashQueryStringUtils from './no-hash-query-string-utils.js';
 import ResolvingRedirectRequestHandler from './resolving-redirect-request-handler.js';
-import { LogoutFailureError, ServerError, TokenFailureError } from './error.js';
+import { ServerError, TokenFailureError } from './error.js';
 import OauthFetchRequestor from './oauth-fetch-requestor.js';
 
 export { TokenResponse, type TokenResponseJson } from '@openid/appauth';
@@ -165,10 +165,15 @@ export default class OauthFacade {
     try {
       await this.tokenHandler.performRevokeTokenRequest(this.config, revokeTokenRequest);
     } catch (error) {
+      // RFC 7009 defines token revocation errors, but performRevokeTokenRequest doesn't attempt
+      // to look for them and doesn't return the response itself.
+      // TODO: Token revocation errors should be detected and a LogoutFailureError thrown.
+
       // Based on the implementation of performRevokeTokenRequest, the error should at least be an
       // AppAuthError, but this cannot be structurally guaranteed
       if (error instanceof AppAuthError) {
-        throw new LogoutFailureError('', error.message); // TODO: get a code for a 4xx error
+        // The server or connection failed in some way, only these are thrown.
+        throw new ServerError(error.message);
       }
       // This should never happen
       /* v8 ignore next 2 */
